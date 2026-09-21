@@ -172,7 +172,7 @@ function buildReportHtml(data, logoUri) {
         esc(s.unknownVaults.slice(0, 4).map(u => `${u.client} (${u.vault})`).join(', ')) + '.');
     }
     if (s.manualAmount) {
-      notes.push(`${money(s.manualAmount)} of Revenue (${s.manual} payment${s.manual === 1 ? '' : 's'}) was entered by hand from Lumino, which has no integration — see config/manual-payments.json.`);
+      notes.push(`${money(s.manualAmount)} of Revenue (${s.manual} payment${s.manual === 1 ? '' : 's'}) was taken through Lumino and entered by hand, as Lumino has no API to read from.`);
     }
     if (s.manualUnmatched) {
       notes.push(`<b>${s.manualUnmatched} hand-entered payment(s) name a client that is not in the sheet</b> and are listed as unallocated below.`);
@@ -180,12 +180,6 @@ function buildReportHtml(data, logoUri) {
     if (s.pendingUsed && s.pendingUsed.length) {
       notes.push(`<b>${esc(s.pendingUsed.join(', '))}</b> paid but ${s.pendingUsed.length > 1 ? 'are' : 'is'} not in the master sheet yet — ` +
         `counted in Revenue, but with no leads, SMS or industry until added.`);
-    }
-    if (s.ignoredAmount) {
-      notes.push(`${money(Math.abs(s.ignoredAmount))} of payments were excluded as known non-revenue (test cards and other agencies on this gateway).`);
-    }
-    if (s.failedAmount) {
-      notes.push(`${money(s.failedAmount)} of attempted payments failed in this period and is not counted as revenue.`);
     }
   }
   const ss = at.smsSource;
@@ -200,8 +194,11 @@ function buildReportHtml(data, logoUri) {
     notes.push(`${n(att.leadsViaCampaign)} lead(s) were matched by campaign name because their LocationID is not filled in yet.`);
   }
   for (const w of (at.warnings || []).slice(0, 4)) notes.push(esc(w));
+  // Kept to the END of the report, on its own page: these are caveats for
+  // whoever questions a figure, not something to read before the figures.
   const notesBlock = notes.length
-    ? `<div class="notes"><div class="notes-title">Reporting notes</div><ul>${notes.map(x => `<li>${x}</li>`).join('')}</ul></div>`
+    ? `<div class="section-title pagebreak">Reporting notes</div>
+       <div class="notes"><ul>${notes.map(x => `<li>${x}</li>`).join('')}</ul></div>`
     : '';
 
   // ── Unallocated payments ───────────────────────────────────────────────────
@@ -269,10 +266,9 @@ body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:
 .kpi b { font-size: 26px; font-weight: 800; line-height: 1.05; margin-top: 4px; }
 
 .note { font-size: 11.5px; color: #475569; margin: 12px 2px 2px; line-height: 1.5; }
-.notes { border: 1px solid #fcd34d; background: #fffbeb; border-radius: 8px; padding: 8px 12px; margin: 10px 0 2px; }
-.notes-title { font-size: 10.5px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: .4px; }
+.notes { border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px; padding: 10px 14px; margin: 4px 0 2px; }
 .notes ul { margin: 4px 0 0; padding-left: 16px; }
-.notes li { font-size: 10.5px; color: #78350f; line-height: 1.5; }
+.notes li { font-size: 10.5px; color: #475569; line-height: 1.6; margin-bottom: 3px; }
 
 .section-title { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: #0b1220;
   display: flex; align-items: center; gap: 8px; }
@@ -340,8 +336,6 @@ table.wo td.cname { color: #111827; }
     ${card('Last Week', d(lw.rangeStart) + ' – ' + dY(lw.rangeEnd), lw.grand, ACCENT_WEEK)}
   </div>
 
-  ${notesBlock}
-
   ${(at.computedRules || []).map(r => `<div class="note">${r.footnoteLead ? `<b>${esc(r.footnoteLead)}</b> ` : ''}${esc(r.footnote)}</div>`).join('')}
 
   <div class="note">The cost shown below by industry and by client is based on the actual data cost
@@ -362,6 +356,8 @@ table.wo td.cname { color: #111827; }
   </table>
 
   ${unallocatedSection}
+
+  ${notesBlock}
 
 </body></html>`;
 }
