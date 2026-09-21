@@ -45,6 +45,15 @@ npm run preview 2026-09-14 2026-09-20  # a specific week
 
 The PDF lands in `previews/`. Nothing is posted to Slack.
 
+## Where it runs
+
+Railway project **Demand Flow Weekly Report**, service `df-weekly-report`:
+https://df-weekly-report-production.up.railway.app
+
+Pushing to `main` deploys it. Secrets live as Railway variables, never in the
+repo. The Monday post needs `SLACK_BOT_TOKEN` and `SLACK_REPORT_CHANNEL_ID`:
+without them the cron logs that it skipped and posts nothing.
+
 ## Endpoints
 
 All but `/health` require the `x-report-secret` header (`ADMIN_SECRET`).
