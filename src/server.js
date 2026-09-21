@@ -58,7 +58,8 @@ app.get('/api/report.pdf', requireSecret, async (req, res) => {
 // Render and post to Slack now — the same path the Monday cron takes.
 app.post('/api/report/slack', requireSecret, async (req, res) => {
   try {
-    const result = await sendReportToSlack(req.body && req.body.start, req.body && req.body.end);
+    const b = req.body || {};
+    const result = await sendReportToSlack(b.start, b.end, { test: !!b.test });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[Report] Slack error:', err.message);
@@ -81,7 +82,9 @@ app.get('/api/slack-check', requireSecret, async (req, res) => {
   }
 });
 
-async function sendReportToSlack(start, end) {
+// `test` posts the same report without the @channel mention, for checking the
+// wiring without pulling everyone into the room.
+async function sendReportToSlack(start, end, { test = false } = {}) {
   const data = await buildReportData(start, end, { force: true });
   const pdf = await renderWeeklyPdf(data);
   const week = { start: data.lastWeek.rangeStart, end: data.lastWeek.rangeEnd };
@@ -89,8 +92,10 @@ async function sendReportToSlack(start, end) {
   const out = await slack.uploadPdf(pdf, {
     filename: name,
     title: name.replace(/\.pdf$/, ''),
-    comment: '<!channel> Please find attached the weekly profitability report for last week ' +
-             'in total, by industry and by client.',
+    comment: test
+      ? 'Test post — checking the weekly report delivery. The real one arrives on Monday mornings.'
+      : '<!channel> Please find attached the weekly profitability report for last week ' +
+        'in total, by industry and by client.',
   });
   console.log(`[Report] posted to Slack for ${week.start} → ${week.end}`);
   return { week, fileId: out.files && out.files[0] && out.files[0].id };
