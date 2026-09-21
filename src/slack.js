@@ -56,4 +56,18 @@ async function uploadPdf(buffer, { filename, title, comment }) {
   }, true);
 }
 
-module.exports = { configured, authTest, uploadPdf, slackApi };
+// Text-only alarm, through an incoming webhook. Used when the Monday report
+// could not be posted: silence on a Monday morning is indistinguishable from a
+// quiet week, and nobody chases a report they did not know was missing.
+async function postAlert(text) {
+  if (!config.slackAlertWebhook) return false;
+  try {
+    await axios.post(config.slackAlertWebhook, { text }, { timeout: 15000 });
+    return true;
+  } catch (e) {
+    console.error('[Slack] alert webhook failed:', e.message);
+    return false;
+  }
+}
+
+module.exports = { configured, authTest, uploadPdf, slackApi, postAlert };

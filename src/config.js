@@ -24,6 +24,9 @@ const config = {
 
   slackBotToken:  process.env.SLACK_BOT_TOKEN || '',
   slackChannelId: process.env.SLACK_REPORT_CHANNEL_ID || '',
+  // A plain incoming webhook, used only to raise the alarm in Slack when the
+  // Monday run fails. It cannot carry the PDF — that needs the bot token above.
+  slackAlertWebhook: process.env.SLACK_ALERT_WEBHOOK || '',
 
   adminSecret: process.env.ADMIN_SECRET || '',
   port: num(process.env.PORT, 4100),

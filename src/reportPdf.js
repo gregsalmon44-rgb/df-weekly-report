@@ -190,10 +190,11 @@ function buildReportHtml(data, logoUri) {
   if (att.leadsUnmatched) {
     notes.push(`${n(att.leadsUnmatched)} lead(s) could not be matched to a client${att.leadsUnmatchedSample && att.leadsUnmatchedSample.length ? ' (e.g. ' + esc(att.leadsUnmatchedSample.slice(0, 4).join(', ')) + ')' : ''} and are not counted in any row.`);
   }
-  if (att.leadsViaCampaign) {
-    notes.push(`${n(att.leadsViaCampaign)} lead(s) were matched by campaign name because their LocationID is not filled in yet.`);
+  const keyedByLocation = ds && ds.keyedBy === 'location';
+  for (const w of (at.warnings || []).slice(0, 4)) {
+    if (!keyedByLocation && /have no LocationID on any campaign/.test(w)) continue;
+    notes.push(esc(w));
   }
-  for (const w of (at.warnings || []).slice(0, 4)) notes.push(esc(w));
   // Kept to the END of the report, on its own page: these are caveats for
   // whoever questions a figure, not something to read before the figures.
   const notesBlock = notes.length

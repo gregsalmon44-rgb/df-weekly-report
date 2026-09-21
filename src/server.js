@@ -112,6 +112,8 @@ async function cronTick() {
 
   if (!slack.configured()) {
     console.warn('[Cron] Monday report skipped — Slack is not configured (needs SLACK_BOT_TOKEN and SLACK_REPORT_CHANNEL_ID)');
+    await slack.postAlert(':warning: The Demand Flow weekly report could not be posted: no Slack bot token is configured, ' +
+      'so the PDF cannot be uploaded. The figures are still available from the report service.');
     return;
   }
   const week = lastFullWeek();
@@ -123,8 +125,11 @@ async function cronTick() {
     // entirely is worse than posting a little late.
     console.error('[Cron] Monday report failed, retrying in 10 minutes:', err.message);
     setTimeout(() => {
-      sendReportToSlack(week.start, week.end)
-        .catch(e => console.error('[Cron] Monday report retry failed:', e.message));
+      sendReportToSlack(week.start, week.end).catch(e => {
+        console.error('[Cron] Monday report retry failed:', e.message);
+        slack.postAlert(`:rotating_light: The Demand Flow weekly report (${week.start} – ${week.end}) ` +
+          `failed twice and has NOT been posted.\nError: ${e.message}`);
+      });
     }, 10 * 60 * 1000);
   }
 }
