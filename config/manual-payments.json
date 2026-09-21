@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Payments taken OUTSIDE EasyPay, entered by hand. Lumino carries a handful of",
+    "pay-by-link payments and has no integration, so its seven payments since",
+    "1 July are recorded here rather than left out of revenue entirely.",
+    "",
+    "Each entry: date (the day the client was charged), client (must match the",
+    "client's name in the master sheet), amount in dollars, source, note.",
+    "The report totals these into Revenue like any other payment, and says on the",
+    "page how much of the total was entered by hand.",
+    "",
+    "Add new Lumino payments here. If Lumino ever gets an API, this file is",
+    "replaced by a sync and can be deleted."
+  ],
+  "payments": [
+    { "date": "2026-07-02", "client": "Brendan Rappoport", "amount": 2125.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-07-31", "client": "Victor Vasquez", "amount": 1155.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-08-10", "client": "Victor Vasquez", "amount": 462.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-08-21", "client": "Victor Vasquez", "amount": 462.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-08-28", "client": "Victor Vasquez", "amount": 231.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-09-02", "client": "Victor Vasquez", "amount": 462.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" },
+    { "date": "2026-09-09", "client": "Victor Vasquez", "amount": 539.00, "source": "lumino", "note": "Pay-by-Link, Apple Pay" }
+  ]
+}

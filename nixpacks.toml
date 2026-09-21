@@ -1,0 +1,21 @@
+# Railway build config. The report is rendered by headless Chromium (puppeteer),
+# and the default image has none of Chromium's shared libraries — without these
+# the browser fails to launch at runtime with an error that names a missing .so
+# rather than anything about PDFs.
+[phases.setup]
+aptPkgs = [
+  "libnss3", "libatk-bridge2.0-0", "libatk1.0-0", "libcups2", "libdrm2",
+  "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxfixes3", "libxrandr2",
+  "libgbm1", "libasound2", "libpango-1.0-0", "libcairo2", "libatspi2.0-0",
+  "libxshmfence1", "libx11-6", "libxcb1", "libxext6", "libxi6", "libxtst6",
+  "libglib2.0-0", "libnspr4", "fonts-liberation", "ca-certificates"
+]
+
+# Idempotent — a no-op when npm install has already fetched the browser.
+[phases.build]
+cmds = ["npx puppeteer browsers install chrome"]
+
+[variables]
+# An absolute path, because HOME differs between build and runtime and the
+# browser downloaded during the build has to be found again when the app runs.
+PUPPETEER_CACHE_DIR = "/app/.cache/puppeteer"

@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Clients whose revenue is NOT collected through a payment gateway, and so has",
+    "to be derived from the leads delivered instead.",
+    "",
+    "Each rule matches campaigns by a pattern on their name, groups them into their",
+    "own category, and values every lead at `perLead`. The gross/commission/credits",
+    "figures are recorded so the report can show HOW the rate was arrived at — they",
+    "are not recalculated, so if the deal changes, change perLead too.",
+    "",
+    "A rule replaces any gateway revenue for those campaigns. If the gateway DOES",
+    "hold payments for them, the report says so rather than quietly discarding them."
+  ],
+  "rules": [
+    {
+      "id": "leadbreakers",
+      "campaignPattern": "^leadbreakers",
+      "client": "Cooper — LeadBreakers",
+      "industry": "LeadBreakers",
+      "perLead": 48,
+      "gross": 75,
+      "commission": 15,
+      "creditsAllowance": 0.2,
+      "footnoteLead": "Leadbreakers revenue",
+      "footnote": "is not based on actual receipts but rather based on accrued revenue of $48 per lead calculated as follows: Leads are sold at $75 each, less $15 per lead for Cooper's commission leaving $60 net. Credit allowance is 20% of leads resulting in a realised price of $48 per lead (80% of $60).",
+      "breakdownBy": "state"
+    }
+  ]
+}

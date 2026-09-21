@@ -1,0 +1,140 @@
+// The Demand Flow weekly report service.
+//
+// Small on purpose: it renders the report on demand, and posts it to Slack every
+// Monday morning. Everything it reports on is read live from the spreadsheet and
+// the payment gateway at render time, so there is no ingest to keep running and
+// nothing to go stale between Mondays.
+const express = require('express');
+const { config } = require('./config');
+const { buildReportData } = require('./pnl');
+const { renderWeeklyPdf } = require('./reportPdf');
+const { lastFullWeek, etDateStr } = require('./dates');
+const slack = require('./slack');
+const db = require('./db');
+
+const app = express();
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// Everything below is machine-to-machine and gated on a shared secret. It fails
+// closed: with no ADMIN_SECRET set, nothing is reachable.
+function requireSecret(req, res, next) {
+  if (!config.adminSecret || req.headers['x-report-secret'] !== config.adminSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+const fileNameFor = (week) => `Demand Flow - Weekly Profitability Report - ${week.start} to ${week.end}.pdf`;
+
+// The figures, as JSON — for checking a number without rendering a PDF.
+app.get('/api/report.json', requireSecret, async (req, res) => {
+  try {
+    const data = await buildReportData(req.query.start, req.query.end, { force: true });
+    res.json(data);
+  } catch (err) {
+    console.error('[Report] JSON error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The PDF itself. ?download=1 to save rather than view.
+app.get('/api/report.pdf', requireSecret, async (req, res) => {
+  try {
+    const data = await buildReportData(req.query.start, req.query.end, { force: true });
+    const pdf = await renderWeeklyPdf(data);
+    const name = fileNameFor({ start: data.lastWeek.rangeStart, end: data.lastWeek.rangeEnd });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition',
+      `${req.query.download ? 'attachment' : 'inline'}; filename="${name}"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error('[Report] PDF error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Render and post to Slack now — the same path the Monday cron takes.
+app.post('/api/report/slack', requireSecret, async (req, res) => {
+  try {
+    const result = await sendReportToSlack(req.body && req.body.start, req.body && req.body.end);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[Report] Slack error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Is delivery actually wired up? Answers before a Monday proves it the hard way.
+app.get('/api/slack-check', requireSecret, async (req, res) => {
+  try {
+    const auth = slack.configured() ? await slack.authTest() : null;
+    res.json({
+      configured: slack.configured(),
+      channelId: config.slackChannelId || null,
+      team: auth ? auth.team : null,
+      botUser: auth ? auth.user : null,
+    });
+  } catch (err) {
+    res.status(500).json({ configured: slack.configured(), error: err.message });
+  }
+});
+
+async function sendReportToSlack(start, end) {
+  const data = await buildReportData(start, end, { force: true });
+  const pdf = await renderWeeklyPdf(data);
+  const week = { start: data.lastWeek.rangeStart, end: data.lastWeek.rangeEnd };
+  const name = fileNameFor(week);
+  const out = await slack.uploadPdf(pdf, {
+    filename: name,
+    title: name.replace(/\.pdf$/, ''),
+    comment: '<!channel> Please find attached the weekly profitability report for last week ' +
+             'in total, by industry and by client.',
+  });
+  console.log(`[Report] posted to Slack for ${week.start} → ${week.end}`);
+  return { week, fileId: out.files && out.files[0] && out.files[0].id };
+}
+
+// ── Monday morning ───────────────────────────────────────────────────────────
+// Checked once a minute against LONDON time, with a guard so a restart inside
+// the same minute cannot post the report twice.
+let lastPostedOn = null;
+
+async function cronTick() {
+  const now = new Date();
+  const london = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
+  if (london.getDay() !== 1 || london.getHours() !== 8 || london.getMinutes() !== 0) return;
+
+  const stamp = london.toDateString();
+  if (lastPostedOn === stamp) return;
+  lastPostedOn = stamp;
+
+  if (!slack.configured()) {
+    console.warn('[Cron] Monday report skipped — Slack is not configured (needs SLACK_BOT_TOKEN and SLACK_REPORT_CHANNEL_ID)');
+    return;
+  }
+  const week = lastFullWeek();
+  try {
+    await sendReportToSlack(week.start, week.end);
+  } catch (err) {
+    // One retry ten minutes later: rendering pulls from the sheet, the gateway
+    // and the dashboard, and any of them can have a bad minute. Missing a week
+    // entirely is worse than posting a little late.
+    console.error('[Cron] Monday report failed, retrying in 10 minutes:', err.message);
+    setTimeout(() => {
+      sendReportToSlack(week.start, week.end)
+        .catch(e => console.error('[Cron] Monday report retry failed:', e.message));
+    }, 10 * 60 * 1000);
+  }
+}
+
+app.listen(config.port, async () => {
+  console.log(`[DF Report] listening on ${config.port} (today is ${etDateStr()} ET)`);
+  console.log(`[DF Report] slack: ${slack.configured() ? 'configured → ' + config.slackChannelId : 'NOT configured'}`);
+  console.log(`[DF Report] data cost keyed by: ${config.dataCostKey}`);
+  if (db.enabled()) { try { await db.init(); } catch (e) { console.error('[DB] init failed:', e.message); } }
+  setInterval(cronTick, 60 * 1000);
+});
+
+module.exports = { app, sendReportToSlack };

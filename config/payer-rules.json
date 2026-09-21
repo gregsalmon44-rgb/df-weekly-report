@@ -1,0 +1,133 @@
+{
+  "ignore": [
+    {
+      "email": "blake@outboundexperts.ai",
+      "reason": "Outbound Experts payment on the shared gateway, not Demand Flow"
+    },
+    {
+      "email": "ian@easypaydirect.com",
+      "reason": "EasyPay staff test transaction"
+    },
+    {
+      "email": "tech@easypaydirect.com",
+      "reason": "EasyPay test card"
+    },
+    {
+      "name": "EPD Test Card EPD Test Card",
+      "reason": "EasyPay test card"
+    },
+    {
+      "name": "Jack Test",
+      "reason": "internal test payment"
+    }
+  ],
+  "aliases": [
+    {
+      "vault": "1449495894",
+      "client": "Jeremy Dobrowski",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "959229811",
+      "client": "Justin Jones",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1859144753",
+      "client": "Josh weathers",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1465565540",
+      "client": "Shawn Eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "2136647797",
+      "client": "Shawn Eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "825795069",
+      "client": "Henry Holcombe",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "563270795",
+      "client": "Joshua weathers",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1105248311",
+      "client": "shawn eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1375560775",
+      "client": "Noris Márquez",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "355366861",
+      "client": "Abdullah Muhammad",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "2000034319",
+      "client": "Joshua Maez",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1023859234",
+      "client": "Shawn Eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1937431103",
+      "client": "leandro placeres",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "870792099",
+      "client": "Williams Jimenez",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "702851133",
+      "client": "Shawn Eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "dakotaandekinfencingcard",
+      "client": "Dakota Andekin",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "2091228440",
+      "client": "Shawn eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "1250619692",
+      "client": "Jamey Burton",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "975640347",
+      "client": "Shawn Eckhoff",
+      "learned": "2026-09-20"
+    },
+    {
+      "vault": "993117947",
+      "client": "Jamey Burton",
+      "learned": "2026-09-20"
+    }
+  ],
+  "pending": [
+    {
+      "name": "Omar Ramirez",
+      "industry": "Other",
+      "note": "signed up the weekend of 20 Sep 2026; add to the master sheet, then delete this entry"
+    }
+  ]
+}
