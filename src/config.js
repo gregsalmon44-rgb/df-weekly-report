@@ -18,7 +18,10 @@ const config = {
   phantomdashSecret: process.env.PHANTOMDASH_COST_SECRET || '',
   // 'campaign' until the LocationID column is filled in and the dashboard has
   // imported it; 'location' is the stronger key and should be switched to then.
-  dataCostKey: process.env.DATA_COST_KEY === 'location' ? 'location' : 'campaign',
+  // 'both' uses the location figure where a campaign has an id and the campaign
+  // name only where it does not — neither keying covers everything alone.
+  dataCostKey: ['location', 'campaign', 'both'].includes(process.env.DATA_COST_KEY)
+    ? process.env.DATA_COST_KEY : 'both',
 
   databaseUrl: process.env.DATABASE_URL || '',
 

@@ -8,7 +8,7 @@ const { config } = require('./config');
 const { fetchEntities } = require('./roster');
 const { leadCounts } = require('./leads');
 const { smsCounts } = require('./sms');
-const { fetchDataCost } = require('./dataCost');
+const { fetchDataCost, fetchDataCostBoth } = require('./dataCost');
 const { revenueByEntity } = require('./revenue');
 const { etDateStr, lastFullWeek } = require('./dates');
 const db = require('./db');
@@ -42,7 +42,9 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
   const [leads, sms, data, revenue, sheetProblems] = await Promise.all([
     leadCounts(startDay, endDay, { force, campaignNames }),
     smsCounts(startDay, endDay, { force }),
-    fetchDataCost(startDay, endDay, config.dataCostKey),
+    config.dataCostKey === 'both'
+      ? fetchDataCostBoth(startDay, endDay)
+      : fetchDataCost(startDay, endDay, config.dataCostKey),
     revenueByEntity(startDay, endDay, entities, { force }),
     checkSheet({ force }),
   ]);
@@ -78,7 +80,9 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
       const key = c.name.toLowerCase();
       // Leads whose row carries no location id yet are matched on campaign name.
       nLeads += leads.byCampaign.get(key) || 0;
-      dataCost += data.byCampaign.get(key) || 0;
+      // Name-keyed data cost is a FALLBACK: a campaign with a location id is
+      // already counted above, and adding it again would double its cost.
+      if (!(c.locationId || '').trim()) dataCost += data.byCampaign.get(key) || 0;
       if (sms.source !== 'webhook') nSms += sms.byCampaign.get(key) || 0;
     }
 

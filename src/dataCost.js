@@ -64,4 +64,26 @@ async function fetchDataCost(startDay, endDay, keyedBy = 'campaign') {
   }
 }
 
-module.exports = { fetchDataCost };
+// Both keyings at once, because neither covers everything on its own: a
+// campaign with no LocationID is invisible to the location report, and the
+// location report is the only one a rename cannot break. Callers use the
+// location figure where a campaign has an id and the name figure only where it
+// does not, so nothing is counted twice and nothing is dropped.
+async function fetchDataCostBoth(startDay, endDay) {
+  const [byLoc, byCamp] = await Promise.all([
+    fetchDataCost(startDay, endDay, 'location'),
+    fetchDataCost(startDay, endDay, 'campaign'),
+  ]);
+  // Totals come from whichever call succeeded — they describe the same spend.
+  const base = byCamp.available ? byCamp : byLoc;
+  return {
+    available: byLoc.available || byCamp.available,
+    reason: byLoc.available || byCamp.available ? null : (byLoc.reason || byCamp.reason),
+    keyedBy: 'location+campaign',
+    byLocation: byLoc.byLocation,
+    byCampaign: byCamp.byCampaign,
+    totals: base.totals,
+  };
+}
+
+module.exports = { fetchDataCost, fetchDataCostBoth };
