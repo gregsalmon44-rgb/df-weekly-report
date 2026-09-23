@@ -65,6 +65,16 @@ app.get('/api/report.pdf', requireSecret, async (req, res) => {
 //
 // Gated by a token in the query string, because that is all a GHL webhook can
 // carry. No SMS_HOOK_SECRET set = the endpoint is closed.
+// The last few payloads exactly as GHL sent them, with what was read out of
+// each. GHL's payload has differed from its documentation before, and "the
+// location id is in there somewhere" is only worth anything if this service is
+// reading the field GHL actually sends.
+const recentHooks = [];
+
+app.get('/api/admin/sms-recent', requireSecret, (req, res) => {
+  res.json({ count: recentHooks.length, hooks: recentHooks });
+});
+
 app.post('/api/hooks/sms-sent', (req, res) => {
   if (!config.smsHookSecret || req.query.token !== config.smsHookSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -77,6 +87,16 @@ app.post('/api/hooks/sms-sent', (req, res) => {
     (b.location && (b.location.id || b.location.locationId)) || '';
   const campaign = (b.location && b.location.name) || b.location_name || b.campaign || null;
   smsCounter.record(locationId, campaign);
+
+  recentHooks.unshift({
+    at: new Date().toISOString(),
+    locationIdRead: locationId || null,
+    campaignRead: campaign,
+    topLevelFields: Object.keys(b).slice(0, 40),
+    payload: JSON.stringify(b).slice(0, 2000),
+  });
+  if (recentHooks.length > 5) recentHooks.pop();
+
   res.json({ ok: true });
 });
 
