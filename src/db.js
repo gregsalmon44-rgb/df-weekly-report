@@ -114,6 +114,21 @@ async function getRevenueByLocation(startDay, endDay) {
   return rows;
 }
 
+// Per day per location, for comparing the counter against the sheet.
+async function getSmsByDay(startDay, endDay) {
+  const { rows } = await query(
+    `SELECT location_id, to_char(day, 'YYYY-MM-DD') AS day, SUM(count)::int AS count, MAX(campaign) AS campaign
+       FROM sms_sends WHERE day BETWEEN $1 AND $2
+       GROUP BY location_id, day ORDER BY day`,
+    [startDay, endDay]);
+  return rows;
+}
+
+async function countSmsRows() {
+  const { rows } = await query('SELECT COUNT(*)::int AS n, COALESCE(SUM(count),0)::int AS total FROM sms_sends');
+  return rows[0] || { n: 0, total: 0 };
+}
+
 async function countLedgerRows() {
   const { rows } = await query('SELECT COUNT(*)::int AS n FROM ledger_entries');
   return rows[0] ? rows[0].n : 0;
@@ -121,6 +136,6 @@ async function countLedgerRows() {
 
 module.exports = {
   enabled, init, query,
-  getSmsSendsForRange, incrementSmsSends, setSmsSendsBatch,
+  getSmsSendsForRange, incrementSmsSends, setSmsSendsBatch, getSmsByDay, countSmsRows,
   getRevenueByLocation, countLedgerRows,
 };

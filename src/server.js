@@ -11,6 +11,9 @@ const { renderWeeklyPdf } = require('./reportPdf');
 const { lastFullWeek, etDateStr } = require('./dates');
 const slack = require('./slack');
 const db = require('./db');
+const smsCounter = require('./smsCounter');
+const { smsFromSheet, smsFromDb } = require('./sms');
+const { fetchCampaigns } = require('./roster');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -51,6 +54,131 @@ app.get('/api/report.pdf', requireSecret, async (req, res) => {
     res.send(pdf);
   } catch (err) {
     console.error('[Report] PDF error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SMS COUNTER ──────────────────────────────────────────────────────────────
+// Called by a GoHighLevel workflow once per message sent. Answers immediately
+// and counts in the background: a slow reply makes GHL retry, and a retry would
+// count the same message twice.
+//
+// Gated by a token in the query string, because that is all a GHL webhook can
+// carry. No SMS_HOOK_SECRET set = the endpoint is closed.
+app.post('/api/hooks/sms-sent', (req, res) => {
+  if (!config.smsHookSecret || req.query.token !== config.smsHookSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const b = req.body || {};
+  // GHL sends the location in several shapes depending on how the workflow is
+  // built, so read all of them rather than insisting on one.
+  const locationId = b.locationId || b.location_id ||
+    (b.customData && (b.customData.locationId || b.customData.location_id)) ||
+    (b.location && (b.location.id || b.location.locationId)) || '';
+  const campaign = (b.location && b.location.name) || b.location_name || b.campaign || null;
+  smsCounter.record(locationId, campaign);
+  res.json({ ok: true });
+});
+
+// How the counter is doing: what it has received, what is still buffered, and
+// what has reached the database.
+app.get('/api/admin/sms-status', requireSecret, async (req, res) => {
+  try {
+    const stored = db.enabled() ? await db.countSmsRows() : null;
+    res.json({
+      reportReadsFrom: config.smsSource,
+      counter: smsCounter.state(),
+      database: db.enabled() ? { connected: true, rows: stored.n, smsCounted: stored.total } : { connected: false },
+      hookConfigured: !!config.smsHookSecret,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The counter against the sheet, day by day. This is what decides whether the
+// counter can be trusted: agreement over a full week, not a good-looking total.
+app.get('/api/admin/sms-compare', requireSecret, async (req, res) => {
+  try {
+    const start = req.query.start, end = req.query.end || start;
+    if (!start) return res.status(400).json({ error: 'start=YYYY-MM-DD required' });
+    if (!db.enabled()) return res.status(400).json({ error: 'No database configured — the counter has nowhere to write.' });
+
+    const [sheet, rows, { campaigns }] = await Promise.all([
+      smsFromSheet(start, end, { force: true }),
+      db.getSmsByDay(start, end),
+      fetchCampaigns({ force: true }),
+    ]);
+    // The sheet counts by campaign name, the webhook by location id, so one side
+    // has to be translated before they can be compared at all.
+    const locOf = new Map(campaigns.filter(c => c.locationId).map(c => [c.name.toLowerCase(), c.locationId]));
+    const nameOf = new Map(campaigns.filter(c => c.locationId).map(c => [c.locationId, c.name]));
+
+    const byLoc = new Map();
+    for (const r of rows) byLoc.set(r.location_id, (byLoc.get(r.location_id) || 0) + r.count);
+
+    const perCampaign = [];
+    let sheetTotal = 0, hookTotal = 0;
+    for (const [nameLc, count] of sheet.byCampaign) {
+      sheetTotal += count;
+      const loc = locOf.get(nameLc);
+      const hook = loc ? (byLoc.get(loc) || 0) : null;
+      perCampaign.push({ campaign: nameLc, locationId: loc || null, sheet: count, webhook: hook,
+        difference: hook == null ? null : hook - count });
+    }
+    for (const [loc, count] of byLoc) {
+      hookTotal += count;
+      const name = nameOf.get(loc);
+      if (!name || !sheet.byCampaign.has(name.toLowerCase())) {
+        perCampaign.push({ campaign: name || '(unknown location ' + loc + ')', locationId: loc,
+          sheet: 0, webhook: count, difference: count });
+      }
+    }
+    perCampaign.sort((a, b) => Math.abs(b.difference || 0) - Math.abs(a.difference || 0));
+    res.json({
+      range: { start, end },
+      totals: { sheet: sheetTotal, webhook: hookTotal, difference: hookTotal - sheetTotal,
+                percentOfSheet: sheetTotal ? Math.round((hookTotal / sheetTotal) * 1000) / 10 : null },
+      campaignsWithNoLocationId: perCampaign.filter(c => c.locationId === null).length,
+      perCampaign: perCampaign.slice(0, 200),
+    });
+  } catch (err) {
+    console.error('[SMS compare] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Load the sheet's historical counts into the counter's table, so that switching
+// over does not lose every week before the webhook existed. Idempotent: it SETS
+// each day's figure rather than adding, so running it twice changes nothing.
+app.post('/api/admin/sms-import-sheet', requireSecret, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const start = b.start || config.allTimeStart, end = b.end || etDateStr();
+    const commit = !!b.commit;
+    if (!db.enabled()) return res.status(400).json({ error: 'No database configured' });
+
+    const [sheet, { campaigns }] = await Promise.all([
+      smsFromSheet(start, end, { force: true }),
+      fetchCampaigns({ force: true }),
+    ]);
+    // Without a location id there is nothing to key the row on; those campaigns
+    // are listed back rather than counted under a placeholder.
+    const locOf = new Map(campaigns.filter(c => c.locationId).map(c => [c.name.toLowerCase(), c.locationId]));
+    const rows = [], skipped = [];
+    for (const [nameLc, count] of sheet.byCampaign) {
+      const loc = locOf.get(nameLc);
+      if (!loc) { skipped.push({ campaign: nameLc, sms: count }); continue; }
+      rows.push({ locationId: loc, day: null, count, campaign: nameLc });
+    }
+    res.json({
+      dryRun: !commit,
+      note: 'The sheet tab holds one row per campaign per DAY; this summary is by campaign. ' +
+            'Use scripts/import-sms-history.js to write the per-day rows.',
+      range: { start, end }, campaignsReady: rows.length, smsReady: rows.reduce((t, r) => t + r.count, 0),
+      campaignsSkipped: skipped.length, skipped: skipped.slice(0, 20),
+    });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -160,7 +288,13 @@ app.listen(config.port, async () => {
   console.log(`[DF Report] listening on ${config.port} (today is ${etDateStr()} ET)`);
   console.log(`[DF Report] slack: ${slack.configured() ? 'configured → ' + config.slackChannelId : 'NOT configured'}`);
   console.log(`[DF Report] data cost keyed by: ${config.dataCostKey}`);
-  if (db.enabled()) { try { await db.init(); } catch (e) { console.error('[DB] init failed:', e.message); } }
+  if (db.enabled()) {
+    try { await db.init(); smsCounter.start(); }
+    catch (e) { console.error('[DB] init failed:', e.message); }
+  } else {
+    console.warn('[DF Report] no DATABASE_URL — the SMS counter cannot store anything');
+  }
+  console.log(`[DF Report] sms webhook: ${config.smsHookSecret ? 'open (token required)' : 'CLOSED (no SMS_HOOK_SECRET)'}; report reads SMS from: ${config.smsSource}`);
   setInterval(cronTick, 60 * 1000);
 });
 

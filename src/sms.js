@@ -65,10 +65,15 @@ async function smsFromDb(startDay, endDay) {
 // for; otherwise falls back to the sheet. A half-migrated week (webhook started
 // mid-week) would otherwise report only the days the webhook saw.
 async function smsCounts(startDay, endDay, opts = {}) {
-  if (db.enabled()) {
+  const source = config.smsSource;
+
+  if (source !== 'sheet' && db.enabled()) {
     try {
       const fromDb = await smsFromDb(startDay, endDay);
-      if (fromDb.total > 0) return fromDb;
+      // 'webhook' means the counter is the record, even for a window it has no
+      // data for — otherwise switching over would silently re-read the sheet for
+      // older weeks and nobody would notice the counter had a gap.
+      if (source === 'webhook' || fromDb.total > 0) return fromDb;
     } catch (e) {
       console.error('[SMS] database read failed, falling back to the sheet:', e.message);
     }

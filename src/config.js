@@ -25,6 +25,15 @@ const config = {
 
   databaseUrl: process.env.DATABASE_URL || '',
 
+  // Which SMS figures the REPORT uses. The webhook counter can run for weeks
+  // alongside the sheet before anyone trusts it: 'sheet' keeps reporting from
+  // the manual tab whatever the counter is doing, 'webhook' switches over, and
+  // 'auto' prefers the counter wherever it has data for the window asked for.
+  smsSource: ['sheet', 'webhook', 'auto'].includes(process.env.SMS_SOURCE)
+    ? process.env.SMS_SOURCE : 'sheet',
+  // Shared secret on the GHL webhook URL. No secret = the endpoint is closed.
+  smsHookSecret: process.env.SMS_HOOK_SECRET || '',
+
   slackBotToken:  process.env.SLACK_BOT_TOKEN || '',
   slackChannelId: process.env.SLACK_REPORT_CHANNEL_ID || '',
   // A plain incoming webhook, used only to raise the alarm in Slack when the
