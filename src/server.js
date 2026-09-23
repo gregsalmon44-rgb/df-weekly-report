@@ -123,6 +123,15 @@ async function cronTick() {
   }
   const week = lastFullWeek();
   try {
+    const check = await buildReportData(week.start, week.end, { force: true });
+    if (check.allTime.suspect) {
+      // Posting a report built on a partial read is worse than posting nothing:
+      // the figures look plausible and get believed.
+      console.error('[Cron] Monday report HELD BACK:', check.allTime.suspect);
+      await slack.postAlert(':warning: The Demand Flow weekly report has NOT been posted, ' +
+        'because the data looks incomplete.\n' + check.allTime.suspect);
+      return;
+    }
     await sendReportToSlack(week.start, week.end);
   } catch (err) {
     // One retry ten minutes later: rendering pulls from the sheet, the gateway

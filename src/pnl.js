@@ -203,6 +203,16 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
 
   const grand = rows.reduce(addStats, { ...ZERO });
 
+  // Does this look like a complete read of the sheet?
+  const SANE_SMS_PER_LEAD = 10000;
+  const ratio = grand.leads > 0 ? grand.sms / grand.leads : Infinity;
+  const suspect = grand.sms > 50000 && ratio > SANE_SMS_PER_LEAD
+    ? `Only ${grand.leads} lead(s) were read against ${Math.round(grand.sms).toLocaleString('en-GB')} SMS ` +
+      `(${isFinite(ratio) ? Math.round(ratio).toLocaleString('en-GB') : '∞'} per lead). The leads tab is almost certainly ` +
+      `being read through an active FILTER, which hides rows from the export — clear the filter on the "${config.tabLeads}" tab.`
+    : null;
+  if (suspect) warnings.unshift('SHEET: ' + suspect);
+
   return {
     rangeStart: startDay, rangeEnd: endDay,
     clientCount: rows.length,
@@ -214,6 +224,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
       leadsTotal: leads.total, leadsViaLocation: leads.viaLocation, leadsViaCampaign: leads.viaCampaign,
       leadsUnmatched: leads.unmatched, leadsUnmatchedSample: leads.unmatchedSample, leadsBadDates: leads.badDates,
     },
+    suspect,
     computedRules: computedRules.filter(r => computedUsed.has(r.id)).map(r => ({ id: r.id, client: r.client, industry: r.industry, perLead: r.perLead, footnote: r.footnote, footnoteLead: r.footnoteLead })),
     warnings,
   };

@@ -11,7 +11,7 @@ const config = {
   tabSms:       process.env.SHEET_TAB_SMS    || 'SMS Sent Out',
   sheetsApiKey: process.env.GOOGLE_SHEETS_API_KEY || '',
 
-  smsUnitCost:  num(process.env.SMS_UNIT_COST, 0.0065),
+  smsUnitCost:  num(process.env.SMS_UNIT_COST, 0.0070),
   allTimeStart: process.env.ALL_TIME_START || '2026-07-01',
 
   phantomdashUrl:    (process.env.PHANTOMDASH_URL || '').replace(/\/+$/, ''),

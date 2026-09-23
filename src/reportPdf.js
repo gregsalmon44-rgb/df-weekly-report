@@ -340,7 +340,7 @@ table.wo td.cname { color: #111827; }
   ${(at.computedRules || []).map(r => `<div class="note">${r.footnoteLead ? `<b>${esc(r.footnoteLead)}</b> ` : ''}${esc(r.footnote)}</div>`).join('')}
 
   <div class="note">The cost shown below by industry and by client is based on the actual data cost
-  (per Phantom Data) and assumes an SMS cost of $${unitCost} per SMS sent. It therefore excludes other
+  (per Phantom Data) and assumes an SMS cost of $${Number(unitCost).toFixed(4)} per SMS sent. It therefore excludes other
   costs (such as if there is more than 1 segment, phone number costs, and brand/campaign registration
   costs).</div>
 
