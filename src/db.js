@@ -124,6 +124,13 @@ async function getSmsByDay(startDay, endDay) {
   return rows;
 }
 
+// Remove a location's counts — a test run, or sends recorded against an id that
+// turned out to be wrong. Returns how many rows went, so a no-op is visible.
+async function deleteSmsLocation(locationId) {
+  const { rowCount } = await query('DELETE FROM sms_sends WHERE location_id = $1', [locationId]);
+  return rowCount;
+}
+
 async function countSmsRows() {
   const { rows } = await query('SELECT COUNT(*)::int AS n, COALESCE(SUM(count),0)::int AS total FROM sms_sends');
   return rows[0] || { n: 0, total: 0 };
@@ -136,6 +143,6 @@ async function countLedgerRows() {
 
 module.exports = {
   enabled, init, query,
-  getSmsSendsForRange, incrementSmsSends, setSmsSendsBatch, getSmsByDay, countSmsRows,
+  getSmsSendsForRange, incrementSmsSends, setSmsSendsBatch, getSmsByDay, countSmsRows, deleteSmsLocation,
   getRevenueByLocation, countLedgerRows,
 };

@@ -96,6 +96,16 @@ app.get('/api/admin/sms-status', requireSecret, async (req, res) => {
   }
 });
 
+app.delete('/api/admin/sms-location/:locationId', requireSecret, async (req, res) => {
+  try {
+    if (!db.enabled()) return res.status(400).json({ error: 'No database configured' });
+    const removed = await db.deleteSmsLocation(req.params.locationId);
+    res.json({ ok: true, locationId: req.params.locationId, rowsRemoved: removed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // The counter against the sheet, day by day. This is what decides whether the
 // counter can be trusted: agreement over a full week, not a good-looking total.
 app.get('/api/admin/sms-compare', requireSecret, async (req, res) => {
