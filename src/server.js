@@ -102,14 +102,22 @@ async function sendReportToSlack(start, end, { test = false } = {}) {
 }
 
 // ── Monday morning ───────────────────────────────────────────────────────────
-// Checked once a minute against LONDON time, with a guard so a restart inside
-// the same minute cannot post the report twice.
+// Checked once a minute against LONDON time.
+//
+// The window is 08:00–08:14 rather than the single minute of 08:00: a deploy or
+// restart that happens to span 08:00 would otherwise skip the week silently, and
+// a report nobody receives is the failure that matters here. Posting twice is
+// possible only if the service restarts inside that quarter of an hour AFTER a
+// successful post — visibly harmless, and far rarer than a missed Monday.
+const POST_HOUR = 8;
+const POST_WINDOW_MINUTES = 15;
 let lastPostedOn = null;
 
 async function cronTick() {
   const now = new Date();
   const london = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
-  if (london.getDay() !== 1 || london.getHours() !== 8 || london.getMinutes() !== 0) return;
+  if (london.getDay() !== 1) return;
+  if (london.getHours() !== POST_HOUR || london.getMinutes() >= POST_WINDOW_MINUTES) return;
 
   const stamp = london.toDateString();
   if (lastPostedOn === stamp) return;
