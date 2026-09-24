@@ -14,6 +14,9 @@ const db = require('./db');
 const smsCounter = require('./smsCounter');
 const { smsFromSheet, smsFromDb } = require('./sms');
 const { fetchCampaigns } = require('./roster');
+const { fetchTab, columnIndex } = require('./sheets');
+const { sheetDateOnly } = require('./dates');
+const { parseCount } = require('./sms');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -178,37 +181,77 @@ app.get('/api/admin/sms-compare', requireSecret, async (req, res) => {
   }
 });
 
-// Load the sheet's historical counts into the counter's table, so that switching
-// over does not lose every week before the webhook existed. Idempotent: it SETS
-// each day's figure rather than adding, so running it twice changes nothing.
+// Load the sheet's historical counts into the counter's table, so switching the
+// report over does not lose every week before the webhook existed. Runs here
+// rather than from a laptop because the database is only reachable inside
+// Railway. Idempotent: each day's figure is SET, not added, so re-running after
+// the sheet is corrected simply corrects the table too.
+//
+// Dry run by default. POST {"commit": true} to write.
 app.post('/api/admin/sms-import-sheet', requireSecret, async (req, res) => {
   try {
-    const b = req.body || {};
-    const start = b.start || config.allTimeStart, end = b.end || etDateStr();
-    const commit = !!b.commit;
     if (!db.enabled()) return res.status(400).json({ error: 'No database configured' });
+    const b = req.body || {};
+    const start = b.start || config.allTimeStart;
+    const end = b.end || etDateStr();
+    const commit = !!b.commit;
+    // The webhook is the better record from the day it went live, so the import
+    // stops before it by default — otherwise a hand-typed figure would overwrite
+    // a counted one.
+    const stopBefore = b.stopBefore || null;
 
-    const [sheet, { campaigns }] = await Promise.all([
-      smsFromSheet(start, end, { force: true }),
+    const [rows, { campaigns }] = await Promise.all([
+      fetchTab(config.tabSms, { force: true }),
       fetchCampaigns({ force: true }),
     ]);
-    // Without a location id there is nothing to key the row on; those campaigns
-    // are listed back rather than counted under a placeholder.
-    const locOf = new Map(campaigns.filter(c => c.locationId).map(c => [c.name.toLowerCase(), c.locationId]));
-    const rows = [], skipped = [];
-    for (const [nameLc, count] of sheet.byCampaign) {
-      const loc = locOf.get(nameLc);
-      if (!loc) { skipped.push({ campaign: nameLc, sms: count }); continue; }
-      rows.push({ locationId: loc, day: null, count, campaign: nameLc });
+    const head = rows[0] || [];
+    const cDate = columnIndex(head, 'Date');
+    const cCampaign = columnIndex(head, 'Campaign');
+    const cCount = columnIndex(head, 'Number of SMS sent out', 'SMS Sent', 'Number of SMS');
+    if (cDate === -1 || cCampaign === -1 || cCount === -1) {
+      return res.status(400).json({ error: 'The SMS tab is missing its Date, Campaign or count column.' });
     }
+    const locOf = new Map(campaigns.filter(c => c.locationId).map(c => [c.name.trim().toLowerCase(), c.locationId]));
+
+    const byKey = new Map();
+    const skipped = new Map();
+    let read = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const day = sheetDateOnly(r[cDate]);
+      if (!day || day < start || day > end) continue;
+      if (stopBefore && day >= stopBefore) continue;
+      const count = parseCount(r[cCount]);
+      if (!count) continue;
+      const name = String(r[cCampaign] || '').trim();
+      read += count;
+      const loc = locOf.get(name.toLowerCase());
+      if (!loc) { skipped.set(name, (skipped.get(name) || 0) + count); continue; }
+      const key = loc + '|' + day;
+      const cur = byKey.get(key) || { locationId: loc, day, count: 0, campaign: name };
+      cur.count += count;
+      byKey.set(key, cur);
+    }
+
+    const toWrite = [...byKey.values()];
+    const ready = toWrite.reduce((t, r) => t + r.count, 0);
+    const skippedTotal = [...skipped.values()].reduce((a, c) => a + c, 0);
+
+    if (commit) {
+      for (let i = 0; i < toWrite.length; i += 200) await db.setSmsSendsBatch(toWrite.slice(i, i + 200));
+    }
+    const stored = await db.countSmsRows();
     res.json({
       dryRun: !commit,
-      note: 'The sheet tab holds one row per campaign per DAY; this summary is by campaign. ' +
-            'Use scripts/import-sms-history.js to write the per-day rows.',
-      range: { start, end }, campaignsReady: rows.length, smsReady: rows.reduce((t, r) => t + r.count, 0),
-      campaignsSkipped: skipped.length, skipped: skipped.slice(0, 20),
+      range: { start, end, stopBefore },
+      sheetSmsRead: read,
+      imported: { campaignDays: toWrite.length, sms: ready },
+      skippedNoLocationId: { campaigns: skipped.size, sms: skippedTotal,
+        examples: [...skipped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([n, c]) => ({ campaign: n, sms: c })) },
+      tableNow: { rows: stored.n, sms: stored.total },
     });
   } catch (err) {
+    console.error('[SMS import] error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
