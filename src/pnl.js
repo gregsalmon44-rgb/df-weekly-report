@@ -60,7 +60,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     const name = c.name.toLowerCase();
     const cLeads = (loc ? leads.byLocation.get(loc) || 0 : 0) + (leads.byCampaign.get(name) || 0);
     const cSms = sms.source === 'webhook'
-      ? (loc ? sms.byLocation.get(loc) || 0 : 0)
+      ? (loc ? sms.byLocation.get(loc) || 0 : (sms.byCampaign.get(name) || 0))
       : (sms.byCampaign.get(name) || 0);
     return { leads: cLeads, sms: cSms };
   };
@@ -83,7 +83,11 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
       // Name-keyed data cost is a FALLBACK: a campaign with a location id is
       // already counted above, and adding it again would double its cost.
       if (!(c.locationId || '').trim()) dataCost += data.byCampaign.get(key) || 0;
-      if (sms.source !== 'webhook') nSms += sms.byCampaign.get(key) || 0;
+      // Sheet figures are a FALLBACK once the counter is the source: used only
+      // where a campaign has no location id for the counter to report against.
+      if (sms.source !== 'webhook' || !(c.locationId || '').trim()) {
+        nSms += sms.byCampaign.get(key) || 0;
+      }
     }
 
     const cost = round2(nSms * config.smsUnitCost);

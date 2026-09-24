@@ -70,10 +70,17 @@ async function smsCounts(startDay, endDay, opts = {}) {
   if (source !== 'sheet' && db.enabled()) {
     try {
       const fromDb = await smsFromDb(startDay, endDay);
-      // 'webhook' means the counter is the record, even for a window it has no
-      // data for — otherwise switching over would silently re-read the sheet for
-      // older weeks and nobody would notice the counter had a gap.
-      if (source === 'webhook' || fromDb.total > 0) return fromDb;
+      if (source === 'webhook' || fromDb.total > 0) {
+        // A campaign with no LocationID can never appear in the counter — the
+        // webhook reports by location id and these campaigns are OFF anyway, so
+        // nothing will ever send from them again. Their history exists only on
+        // the sheet (270k messages), so the sheet's figures are carried
+        // alongside; the caller uses them ONLY for campaigns that have no id,
+        // which is why nothing is counted twice.
+        const sheet = await smsFromSheet(startDay, endDay, opts).catch(() => null);
+        return { ...fromDb, byCampaign: sheet ? sheet.byCampaign : new Map(),
+                 sheetTotal: sheet ? sheet.total : 0 };
+      }
     } catch (e) {
       console.error('[SMS] database read failed, falling back to the sheet:', e.message);
     }
