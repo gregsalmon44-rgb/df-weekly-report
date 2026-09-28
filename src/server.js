@@ -260,7 +260,7 @@ app.post('/api/admin/sms-import-sheet', requireSecret, async (req, res) => {
 app.post('/api/report/slack', requireSecret, async (req, res) => {
   try {
     const b = req.body || {};
-    const result = await sendReportToSlack(b.start, b.end, { test: !!b.test });
+    const result = await sendReportToSlack(b.start, b.end, { test: !!b.test, comment: b.comment });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('[Report] Slack error:', err.message);
@@ -285,7 +285,7 @@ app.get('/api/slack-check', requireSecret, async (req, res) => {
 
 // `test` posts the same report without the @channel mention, for checking the
 // wiring without pulling everyone into the room.
-async function sendReportToSlack(start, end, { test = false } = {}) {
+async function sendReportToSlack(start, end, { test = false, comment = null } = {}) {
   const data = await buildReportData(start, end, { force: true });
   const pdf = await renderWeeklyPdf(data);
   const week = { start: data.lastWeek.rangeStart, end: data.lastWeek.rangeEnd };
@@ -293,10 +293,16 @@ async function sendReportToSlack(start, end, { test = false } = {}) {
   const out = await slack.uploadPdf(pdf, {
     filename: name,
     title: name.replace(/\.pdf$/, ''),
-    comment: test
-      ? 'Test post — checking the weekly report delivery. The real one arrives on Monday mornings.'
-      : '<!channel> Please find attached the weekly profitability report for last week ' +
-        'in total, by industry and by client.',
+    // A caller may supply its own wording. Restating a week's figures needs to
+    // say so: two identical posts leave the reader guessing which one counts,
+    // and neither the standard message nor the test one admits to being a
+    // correction. No @channel unless the caller asks for one.
+    comment: comment
+      ? String(comment)
+      : (test
+        ? 'Test post — checking the weekly report delivery. The real one arrives on Monday mornings.'
+        : '<!channel> Please find attached the weekly profitability report for last week ' +
+          'in total, by industry and by client.'),
   });
   console.log(`[Report] posted to Slack for ${week.start} → ${week.end}`);
   return { week, fileId: out.files && out.files[0] && out.files[0].id };
