@@ -121,13 +121,13 @@
       "vault": "993117947",
       "client": "Jamey Burton",
       "learned": "2026-09-20"
+    },
+    {
+      "email": "ryan@stellar-pro.com",
+      "client": "Stellar Pro",
+      "note": "One-off reattempt with no vault id; matched on the email domain. Confirmed by the user 2026-09-28.",
+      "learned": "2026-09-28"
     }
   ],
-  "pending": [
-    {
-      "name": "Omar Ramirez",
-      "industry": "Other",
-      "note": "signed up the weekend of 20 Sep 2026; add to the master sheet, then delete this entry"
-    }
-  ]
+  "pending": []
 }

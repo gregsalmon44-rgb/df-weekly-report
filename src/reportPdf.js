@@ -6,7 +6,6 @@
 //   • Demand Flow branding — the logo sits on white, small, at the left.
 //   • The SMS unit cost in the footnote is INTERPOLATED from config, so the
 //     stated price cannot drift from the price actually used.
-//   • A "Reporting notes" block prints what the report could not account for
 //     (unmatched leads, missing revenue, missing data cost) instead of letting
 //     those gaps pass as zeroes.
 const fs = require('fs');
@@ -149,59 +148,6 @@ function buildReportHtml(data, logoUri) {
   const atActiveGrand = atS.active.reduce((t, i) => addStats(t, i.totals), { ...ZERO });
   const lwActiveGrand = lwS.active.reduce((t, i) => addStats(t, i.totals), { ...ZERO });
 
-  // ── Reporting notes ────────────────────────────────────────────────────────
-  // Anything the report could not account for is stated on the page. A missing
-  // input that prints as a zero is worse than one that prints as a warning.
-  const notes = [];
-  const ds = at.dataSpend;
-  if (!ds || !ds.available) {
-    notes.push(`<b>Data cost unavailable</b> (${esc((ds && ds.reason) || 'unknown')}) — the Cost column and Net Profit exclude data cost, so profit is overstated.`);
-  } else if (ds.totals && ds.totals.unallocated > 0) {
-    notes.push(`${money(ds.totals.unallocated)} of data spend could not be matched to a client and is excluded from the client rows.`);
-  }
-  const rs = at.revenueSource;
-  if (!rs || !rs.available) {
-    notes.push(`<b>Revenue unavailable</b> (${esc((rs && rs.reason) || 'unknown')}) — every Revenue and Net Profit figure below reads as zero and cannot be relied on yet.`);
-  } else if (rs.stats) {
-    const s = rs.stats;
-    if (s.unmatchedAmount) {
-      notes.push(`${money(s.unmatchedAmount)} of payments could not be matched to a client${s.unmatchedSample && s.unmatchedSample.length ? ' (' + esc(s.unmatchedSample.slice(0, 3).join(', ')) + ')' : ''} and is excluded from Revenue.`);
-    }
-    if (s.unknownVaults && s.unknownVaults.length) {
-      notes.push(`${s.unknownVaults.length} payer(s) were matched by name because their card is not listed in the sheet's EasyPay Reference column: ` +
-        esc(s.unknownVaults.slice(0, 4).map(u => `${u.client} (${u.vault})`).join(', ')) + '.');
-    }
-    if (s.manualAmount) {
-      notes.push(`${money(s.manualAmount)} of Revenue (${s.manual} payment${s.manual === 1 ? '' : 's'}) was taken through Lumino and entered by hand, as Lumino has no API to read from.`);
-    }
-    if (s.manualUnmatched) {
-      notes.push(`<b>${s.manualUnmatched} hand-entered payment(s) name a client that is not in the sheet</b> and are listed as unallocated below.`);
-    }
-    if (s.pendingUsed && s.pendingUsed.length) {
-      notes.push(`<b>${esc(s.pendingUsed.join(', '))}</b> paid but ${s.pendingUsed.length > 1 ? 'are' : 'is'} not in the master sheet yet — ` +
-        `counted in Revenue, but with no leads, SMS or industry until added.`);
-    }
-  }
-  const ss = at.smsSource;
-  if (ss && ss.source === 'sheet') {
-    notes.push('SMS volumes come from the manually maintained "SMS Sent Out" tab, not from an automatic counter.');
-  }
-  const att = at.attribution || {};
-  if (att.leadsUnmatched) {
-    notes.push(`${n(att.leadsUnmatched)} lead(s) could not be matched to a client${att.leadsUnmatchedSample && att.leadsUnmatchedSample.length ? ' (e.g. ' + esc(att.leadsUnmatchedSample.slice(0, 4).join(', ')) + ')' : ''} and are not counted in any row.`);
-  }
-  const keyedByLocation = ds && ds.keyedBy === 'location';
-  for (const w of (at.warnings || []).slice(0, 4)) {
-    if (!keyedByLocation && /have no LocationID on any campaign/.test(w)) continue;
-    notes.push(esc(w));
-  }
-  // Kept to the END of the report, on its own page: these are caveats for
-  // whoever questions a figure, not something to read before the figures.
-  const notesBlock = notes.length
-    ? `<div class="section-title pagebreak">Reporting notes</div>
-       <div class="notes"><ul>${notes.map(x => `<li>${x}</li>`).join('')}</ul></div>`
-    : '';
-
   // ── Unallocated payments ───────────────────────────────────────────────────
   // Money taken that belongs to nobody the report knows about. Known non-revenue
   // (test cards, another agency's payments on this gateway) is filtered out by
@@ -267,9 +213,6 @@ body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:
 .kpi b { font-size: 26px; font-weight: 800; line-height: 1.05; margin-top: 4px; }
 
 .note { font-size: 11.5px; color: #475569; margin: 12px 2px 2px; line-height: 1.5; }
-.notes { border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px; padding: 10px 14px; margin: 4px 0 2px; }
-.notes ul { margin: 4px 0 0; padding-left: 16px; }
-.notes li { font-size: 10.5px; color: #475569; line-height: 1.6; margin-bottom: 3px; }
 
 .section-title { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: #0b1220;
   display: flex; align-items: center; gap: 8px; }
@@ -357,8 +300,6 @@ table.wo td.cname { color: #111827; }
   </table>
 
   ${unallocatedSection}
-
-  ${notesBlock}
 
 </body></html>`;
 }

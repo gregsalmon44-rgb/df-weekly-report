@@ -216,7 +216,7 @@ async function revenueByEntity(startDay, endDay, entities, { force = false } = {
 
     const vault = String(t.vaultId || '').toLowerCase();
     const person = `${t.firstName || ''} ${t.lastName || ''}`.trim();
-    const aliasName = payerRules.aliasClient(rules, vault);
+    const aliasName = payerRules.aliasClient(rules, t);
     const aliasKey = aliasName ? (matchByName(aliasName) || pendingKey(aliasName)) : null;
     const nameKey = person ? matchByName(person) : null;
 

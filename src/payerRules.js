@@ -59,11 +59,35 @@ function ignoreReason(rules, payment) {
   return null;
 }
 
-// vault id → client name
-function aliasClient(rules, vaultId) {
-  if (!vaultId) return null;
-  const hit = rules.aliases.find(a => lc(a.vault) === lc(vaultId));
-  return hit ? hit.client : null;
+// payment → client name.
+//
+// Keyed on whichever identifier is stable, in order of how much it proves: a
+// saved card's vault id, then the email, then the cardholder name. Email and
+// name matter because a one-off payment carries NO vault id at all — a $560
+// reattempt from ryan@stellar-pro.com had an empty vault and so could not be
+// mapped while this only looked at vault ids.
+//
+// The passes are separate rather than one loop so precedence comes from the
+// identifier, not from where someone happened to add the entry in the file.
+function aliasClient(rules, payment) {
+  const p = payment || {};
+  const vault = lc(p.vaultId || p.vault);
+  const email = lc(p.email);
+  const name = lc(`${p.firstName || ''} ${p.lastName || ''}`);
+
+  if (vault) {
+    const hit = rules.aliases.find(a => a.vault && lc(a.vault) === vault);
+    if (hit) return hit.client;
+  }
+  if (email) {
+    const hit = rules.aliases.find(a => a.email && lc(a.email) === email);
+    if (hit) return hit.client;
+  }
+  if (name) {
+    const hit = rules.aliases.find(a => a.name && lc(a.name) === name);
+    if (hit) return hit.client;
+  }
+  return null;
 }
 
 function pendingClients(rules) {
