@@ -4,9 +4,17 @@
     "to be derived from the leads delivered instead.",
     "",
     "Each rule matches campaigns by a pattern on their name, groups them into their",
-    "own category, and values every lead at `perLead`. The gross/commission/credits",
-    "figures are recorded so the report can show HOW the rate was arrived at — they",
-    "are not recalculated, so if the deal changes, change perLead too.",
+    "own category, and values every lead at `perLead` — or, where the deal changed",
+    "part-way through the reporting period, at the `bands` rate for the day that",
+    "lead was delivered. `from` is inclusive and the last band starting on or before",
+    "the day wins, so a band only needs a start date.",
+    "",
+    "`perLead` holds the CURRENT rate and is the fallback for any day earlier than",
+    "the first band: leads outside every band are valued at it rather than at zero,",
+    "because a silent zero reads as a bad month rather than as a missing band.",
+    "",
+    "The gross/commission figures document how a rate was arrived at. They are NOT",
+    "recalculated, so if the deal changes, change the rate itself.",
     "",
     "A rule replaces any gateway revenue for those campaigns. If the gateway DOES",
     "hold payments for them, the report says so rather than quietly discarding them."
@@ -17,12 +25,15 @@
       "campaignPattern": "^leadbreakers",
       "client": "Cooper — LeadBreakers",
       "industry": "LeadBreakers",
-      "perLead": 48,
+      "perLead": 55,
+      "bands": [
+        { "from": "2026-01-01", "perLead": 48, "note": "$75 less $15/lead commission, less 20% credit allowance" },
+        { "from": "2026-08-01", "perLead": 55, "note": "$75 less $5-7/lead commission (state dependent), less 20% credit allowance" }
+      ],
       "gross": 75,
-      "commission": 15,
       "creditsAllowance": 0.2,
       "footnoteLead": "Leadbreakers revenue",
-      "footnote": "is not based on actual receipts but rather based on accrued revenue of $48 per lead calculated as follows: Leads are sold at $75 each, less $15 per lead for Cooper's commission leaving $60 net. Credit allowance is 20% of leads resulting in a realised price of $48 per lead (80% of $60).",
+      "footnote": "is not based on actual receipts but rather based on accrued revenue of $48/lead up to 31 July and $55/lead from 1 August. These amounts are calculated as follows: Leads are sold at $75 each, less Cooper's commission ($15/lead up to 31 July and $5-7/lead (state dependant) from 1 August), less 20% credit allowance.",
       "breakdownBy": "state"
     }
   ]

@@ -71,8 +71,19 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     // Revenue is attributed per billing entity, not per campaign location.
     let dep = revenue.byEntity.get(e.key) || 0;
 
+    // The same leads kept per day, so a derived rate that changes mid-window can
+    // be applied to the days it actually covers. Only read when a
+    // computed-revenue rule matches, but gathered here because this is already
+    // where the entity's leads are collected from both keys.
+    const leadsByDay = new Map();
+    const addDays = (src) => {
+      if (!src) return;
+      for (const [day, n] of src) leadsByDay.set(day, (leadsByDay.get(day) || 0) + n);
+    };
+
     for (const loc of e.locationIds) {
       nLeads += leads.byLocation.get(loc) || 0;
+      addDays(leads.byLocationDay && leads.byLocationDay.get(loc));
       dataCost += data.byLocation.get(loc) || 0;
       if (sms.source === 'webhook') nSms += sms.byLocation.get(loc) || 0;
     }
@@ -80,6 +91,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
       const key = c.name.toLowerCase();
       // Leads whose row carries no location id yet are matched on campaign name.
       nLeads += leads.byCampaign.get(key) || 0;
+      addDays(leads.byCampaignDay && leads.byCampaignDay.get(key));
       // Name-keyed data cost is a FALLBACK: a campaign with a location id is
       // already counted above, and adding it again would double its cost.
       if (!(c.locationId || '').trim()) dataCost += data.byCampaign.get(key) || 0;
@@ -101,10 +113,20 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     if (rule && !rule.partial) {
       if (dep) {
         warnings.push(`${e.name} has ${'$' + dep} of gateway payments, but their revenue is calculated at ` +
-          `$${rule.perLead}/lead — the gateway figure is not counted.`);
+          `${computed.rateLabel(rule)} — the gateway figure is not counted.`);
       }
-      dep = round2(nLeads * rule.perLead);
-      computedNote = rule;
+      // Valued day by day, because the rate can change part-way through the
+      // window: LeadBreakers is $48/lead to 31 July and $55 from 1 August, so an
+      // all-time run spans both and a single multiplication would be wrong.
+      const valued = computed.revenueForDays(rule, leadsByDay);
+      dep = round2(valued.revenue);
+      // A lead the day-split missed would be silently worth nothing, so check
+      // the two counts agree rather than assuming they do.
+      if (valued.leads !== nLeads) {
+        warnings.push(`${e.name}: ${nLeads} leads counted but ${valued.leads} could be dated, ` +
+          `so ${nLeads - valued.leads} were not valued. Revenue for this client is understated.`);
+      }
+      computedNote = { ...rule, bandsUsed: valued.bands };
       computedUsed.add(rule.id);
     } else if (rule && rule.partial) {
       warnings.push(`${e.name}: only ${rule.matched} of ${rule.total} campaigns match the "${rule.id}" revenue rule, ` +
@@ -159,7 +181,11 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
 
     const row = {
       name: computedNote ? computedNote.client : e.name,
-      computed: computedNote ? { perLead: computedNote.perLead, id: computedNote.id } : null,
+      // bands shows the split that produced the figure — how many leads were
+      // valued at each rate — so the number can be checked rather than trusted.
+      computed: computedNote
+        ? { perLead: computedNote.perLead, id: computedNote.id, bands: computedNote.bandsUsed || null }
+        : null,
       key: e.key, off: e.off,
       industry,
       industries: ownIndustries,

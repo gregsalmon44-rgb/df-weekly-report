@@ -13,10 +13,21 @@ async function leadCounts(startDay, endDay, { force = false, campaignNames = nul
   const rows = await fetchTab(config.tabLeads, { force });
   const out = {
     byLocation: new Map(), byCampaign: new Map(),
+    // The same counts split by day. Needed because a derived rate can change
+    // part-way through the reporting window — LeadBreakers moved from $48 to $55
+    // a lead on 1 August — and a total alone cannot be valued once that is true.
+    // Map<key, Map<'YYYY-MM-DD', count>>.
+    byLocationDay: new Map(), byCampaignDay: new Map(),
     total: 0, viaLocation: 0, viaCampaign: 0,
     unmatched: 0, unmatchedSample: [], badDates: 0,
   };
   if (!rows.length) return out;
+
+  const bump = (m, key, day) => {
+    let d = m.get(key);
+    if (!d) { d = new Map(); m.set(key, d); }
+    d.set(day, (d.get(day) || 0) + 1);
+  };
 
   const head = rows[0];
   const cDate = columnIndex(head, 'Date');
@@ -40,10 +51,12 @@ async function leadCounts(startDay, endDay, { force = false, campaignNames = nul
 
     if (loc) {
       out.byLocation.set(loc, (out.byLocation.get(loc) || 0) + 1);
+      bump(out.byLocationDay, loc, day);
       out.viaLocation++;
     } else if (campaign && (!known || known.has(campaign.toLowerCase()))) {
       const k = campaign.toLowerCase();
       out.byCampaign.set(k, (out.byCampaign.get(k) || 0) + 1);
+      bump(out.byCampaignDay, k, day);
       out.viaCampaign++;
     } else {
       out.unmatched++;

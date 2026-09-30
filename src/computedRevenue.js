@@ -41,4 +41,48 @@ function ruleForEntity(rules, entity) {
   return null;
 }
 
-module.exports = { loadRules, ruleForEntity, FILE };
+// What a lead delivered on `day` is worth. Bands are [{ from, perLead }] with
+// `from` inclusive; the last band starting on or before the day wins. A rule
+// with no bands keeps its single perLead, so old rules still work.
+//
+// A day BEFORE the first band is possible if the window is ever backdated, so
+// it falls back to the rule's own perLead rather than valuing those leads at
+// nothing — a silent zero would read as a bad month rather than a missing band.
+function rateForDay(rule, day) {
+  const bands = Array.isArray(rule.bands) ? rule.bands : null;
+  const base = Number(rule.perLead) || 0;
+  if (!bands || !bands.length || !day) return base;
+  let rate = null;
+  for (const b of [...bands].sort((a, z) => String(a.from).localeCompare(String(z.from)))) {
+    if (String(day) >= String(b.from)) rate = Number(b.perLead);
+  }
+  return rate === null ? base : rate;
+}
+
+// Value leads that are split by day. Returns the money plus the per-rate split,
+// so the arithmetic can be shown rather than asserted.
+function revenueForDays(rule, byDay) {
+  const out = { revenue: 0, leads: 0, bands: [] };
+  if (!byDay) return out;
+  const acc = new Map();
+  for (const [day, n] of byDay) {
+    const rate = rateForDay(rule, day);
+    out.revenue += n * rate;
+    out.leads += n;
+    const cur = acc.get(rate) || { rate, leads: 0, revenue: 0 };
+    cur.leads += n; cur.revenue += n * rate;
+    acc.set(rate, cur);
+  }
+  out.revenue = Math.round(out.revenue * 100) / 100;
+  out.bands = [...acc.values()].sort((a, b) => a.rate - b.rate);
+  return out;
+}
+
+// How a rule's rate reads in a warning.
+function rateLabel(rule) {
+  const bands = Array.isArray(rule.bands) ? rule.bands : null;
+  if (!bands || !bands.length) return `$${rule.perLead}/lead`;
+  return bands.map(b => `$${b.perLead}/lead from ${b.from}`).join(', ');
+}
+
+module.exports = { loadRules, ruleForEntity, rateForDay, revenueForDays, rateLabel, FILE };
