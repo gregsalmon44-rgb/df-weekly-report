@@ -18,6 +18,11 @@ async function leadCounts(startDay, endDay, { force = false, campaignNames = nul
     // a lead on 1 August — and a total alone cannot be valued once that is true.
     // Map<key, Map<'YYYY-MM-DD', count>>.
     byLocationDay: new Map(), byCampaignDay: new Map(),
+    // The campaign name seen against each location id. The roster is what
+    // normally supplies names, but a location MISSING from the roster is
+    // exactly the case the report needs to name — so take it from the lead
+    // row itself, which is the only other place it appears.
+    campaignForLocation: new Map(),
     total: 0, viaLocation: 0, viaCampaign: 0,
     unmatched: 0, unmatchedSample: [], badDates: 0,
   };
@@ -52,6 +57,7 @@ async function leadCounts(startDay, endDay, { force = false, campaignNames = nul
     if (loc) {
       out.byLocation.set(loc, (out.byLocation.get(loc) || 0) + 1);
       bump(out.byLocationDay, loc, day);
+      if (campaign && !out.campaignForLocation.has(loc)) out.campaignForLocation.set(loc, campaign);
       out.viaLocation++;
     } else if (campaign && (!known || known.has(campaign.toLowerCase()))) {
       const k = campaign.toLowerCase();

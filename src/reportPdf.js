@@ -148,6 +148,34 @@ function buildReportHtml(data, logoUri) {
   const atActiveGrand = atS.active.reduce((t, i) => addStats(t, i.totals), { ...ZERO });
   const lwActiveGrand = lwS.active.reduce((t, i) => addStats(t, i.totals), { ...ZERO });
 
+  // ── Unassigned leads ───────────────────────────────────────────────────────
+  // Leads the report read but could not put on anybody's row. Reported from the
+  // ALL-TIME window, since that is the one a lead can hide in: a campaign whose
+  // LocationID was never filled in goes on quietly failing to match for months.
+  // The week's own count is shown alongside so it is clear whether this is
+  // history or something happening now.
+  const un = at.unassigned || { total: 0, rows: [] };
+  const unWeek = (lw.unassigned && lw.unassigned.total) || 0;
+  const unassignedSection = un.total ? `
+  <div class="unassigned">
+    <div class="ut">${un.total.toLocaleString('en-GB')} lead${un.total === 1 ? '' : 's'} could not be assigned to a client${unWeek ? ` — ${unWeek.toLocaleString('en-GB')} of them last week` : ''}</div>
+    <div class="us">Every figure below excludes them, so the clients named here are understated.
+    ${un.readTotal != null ? `${un.readTotal.toLocaleString('en-GB')} leads were read and ${Number(un.onRows || 0).toLocaleString('en-GB')} landed on a row.` : ''}
+    The usual cause is a campaign that is on the roster with an empty LocationID — the lead carries the id, the roster does not, so there is nothing to join on.
+    Filling that cell in reattaches them, including historically.</div>
+    ${un.rows && un.rows.length ? `
+    <table>
+      <tr><th style="width:52px">Leads</th><th>Campaign</th><th style="width:190px">Location ID to add to the roster</th></tr>
+      ${un.rows.slice(0, 12).map(r => `<tr>
+        <td class="n">${r.leads.toLocaleString('en-GB')}</td>
+        <td>${esc(r.campaign || '(no campaign name on the lead)')}</td>
+        <td class="id">${r.locationId ? esc(r.locationId) : '—'}</td>
+      </tr>`).join('')}
+      ${un.rows.length > 12 ? `<tr><td class="n">${un.rows.slice(12).reduce((t, r) => t + r.leads, 0)}</td><td colspan="2">across ${un.rows.length - 12} further campaign(s)</td></tr>` : ''}
+    </table>` : ''}
+    ${un.unidentified ? `<div class="us" style="margin-top:8px">${un.unidentified.toLocaleString('en-GB')} of these carry no usable location id and no recognised campaign name, so there is nothing to identify them by${un.unidentifiedSample && un.unidentifiedSample.length ? ` (e.g. ${esc(un.unidentifiedSample.slice(0, 3).join(', '))})` : ''}.</div>` : ''}
+  </div>` : '';
+
   // ── Unallocated payments ───────────────────────────────────────────────────
   // Money taken that belongs to nobody the report knows about. Known non-revenue
   // (test cards, another agency's payments on this gateway) is filtered out by
@@ -214,6 +242,21 @@ body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:
 
 .note { font-size: 11.5px; color: #475569; margin: 12px 2px 2px; line-height: 1.5; }
 
+/* Unassigned leads. Sits ABOVE the figures, because what it says is that the
+   figures below are understated — at the back of the report it would be read
+   after the numbers had already been believed. Renders only when there are
+   some, so it stays an action list rather than furniture. */
+.unassigned { border: 1px solid #fca5a5; background: #fef2f2; border-radius: 8px;
+  padding: 10px 12px; margin: 14px 2px 2px; }
+.unassigned .ut { font-size: 12.5px; font-weight: 700; color: #991b1b; margin-bottom: 3px; }
+.unassigned .us { font-size: 11.5px; color: #7f1d1d; line-height: 1.5; }
+.unassigned table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+.unassigned th { text-align: left; color: #7f1d1d; font-weight: 700; padding: 3px 6px;
+  border-bottom: 1px solid #fca5a5; }
+.unassigned td { padding: 3px 6px; color: #450a0a; border-bottom: 1px solid #fee2e2; vertical-align: top; }
+.unassigned td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.unassigned td.id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: #7f1d1d; }
+
 .section-title { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: #0b1220;
   display: flex; align-items: center; gap: 8px; }
 .section-title::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
@@ -274,6 +317,8 @@ table.wo td.cname { color: #111827; }
       <div class="wk">Week of ${d(lw.rangeStart)} – ${dY(lw.rangeEnd)}</div>
     </div>
   </div>
+
+  ${unassignedSection}
 
   <div class="cards">
     ${card('All-Time', 'Since ' + dY(at.rangeStart), at.grand, ACCENT_ALL)}

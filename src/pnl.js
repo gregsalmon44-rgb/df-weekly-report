@@ -65,6 +65,15 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     return { leads: cLeads, sms: cSms };
   };
 
+  // Which lead keys actually landed on a client row. Anything left over at the
+  // end is a lead the report READ but could not place against anybody — it is in
+  // the totals the sheet implies, yet on no row, so it silently understates a
+  // client. The usual cause is a campaign on the roster whose LocationID cell is
+  // empty: the lead carries the id, the roster does not, so there is nothing to
+  // join on.
+  const usedLocations = new Set();
+  const usedCampaigns = new Set();
+
   const rows = [];
   for (const e of entities) {
     let nLeads = 0, nSms = 0, dataCost = 0;
@@ -82,6 +91,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     };
 
     for (const loc of e.locationIds) {
+      usedLocations.add(loc);
       nLeads += leads.byLocation.get(loc) || 0;
       addDays(leads.byLocationDay && leads.byLocationDay.get(loc));
       dataCost += data.byLocation.get(loc) || 0;
@@ -89,6 +99,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     }
     for (const c of e.campaigns) {
       const key = c.name.toLowerCase();
+      usedCampaigns.add(key);
       // Leads whose row carries no location id yet are matched on campaign name.
       nLeads += leads.byCampaign.get(key) || 0;
       addDays(leads.byCampaignDay && leads.byCampaignDay.get(key));
@@ -243,8 +254,48 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     : null;
   if (suspect) warnings.unshift('SHEET: ' + suspect);
 
+  // Leads that were read but landed on nobody. Each one is a lead the business
+  // delivered and paid to deliver, missing from a client's row — and for a
+  // client whose revenue is DERIVED from their lead count (LeadBreakers), money
+  // missing from the report entirely. Named from the lead rows, because the
+  // roster is precisely what failed to identify them.
+  const unassignedRows = [];
+  for (const [loc, n] of leads.byLocation) {
+    if (usedLocations.has(loc)) continue;
+    unassignedRows.push({
+      leads: n,
+      campaign: leads.campaignForLocation.get(loc) || null,
+      locationId: loc,
+      reason: 'this location id is on no roster campaign — the campaign is probably there with an empty LocationID',
+    });
+  }
+  for (const [key, n] of leads.byCampaign) {
+    if (usedCampaigns.has(key)) continue;
+    unassignedRows.push({
+      leads: n, campaign: key, locationId: null,
+      reason: 'no roster campaign matches this name',
+    });
+  }
+  unassignedRows.sort((a, b) => b.leads - a.leads);
+  const unassignedTotal = unassignedRows.reduce((t, r) => t + r.leads, 0) + leads.unmatched;
+  const unassigned = {
+    total: unassignedTotal,
+    rows: unassignedRows,
+    // Leads carrying neither a usable location id nor a recognised campaign
+    // name — nothing to identify them by at all.
+    unidentified: leads.unmatched,
+    unidentifiedSample: leads.unmatchedSample,
+    readTotal: leads.total,
+    onRows: grand.leads,
+  };
+  if (unassignedTotal) {
+    warnings.unshift(`LEADS: ${unassignedTotal} lead(s) were read but could not be assigned to any client, `
+      + `so they are missing from every row. ${leads.total} read, ${grand.leads} on rows.`);
+  }
+
   return {
     rangeStart: startDay, rangeEnd: endDay,
+    unassigned,
     clientCount: rows.length,
     grand, industries,
     dataSpend: { available: data.available, reason: data.reason, totals: data.totals, keyedBy: data.keyedBy || null },
