@@ -119,6 +119,52 @@ app.get('/api/admin/sms-status', requireSecret, async (req, res) => {
   }
 });
 
+// Is the daily ceiling the right number? Read-only. Returns the account-days
+// over a threshold AND the distribution it has to sit above, because a ceiling
+// chosen without looking at the spread either cries wolf every Monday or never
+// fires at all.
+//   ?start=&end=  default: everything the counter holds
+//   ?threshold=   default: config.smsDailyMax
+app.get('/api/admin/sms-spikes', requireSecret, async (req, res) => {
+  try {
+    if (!db.enabled()) return res.status(400).json({ error: 'No database configured' });
+    const start = String(req.query.start || '2000-01-01');
+    const end = String(req.query.end || '2100-01-01');
+    const threshold = Number(req.query.threshold) > 0 ? Number(req.query.threshold) : config.smsDailyMax;
+
+    const perDay = await db.getSmsByDay(start, end);
+    const counts = perDay.map(r => Number(r.count) || 0).filter(n => n > 0).sort((a, b) => a - b);
+    const at = (q) => (counts.length ? counts[Math.min(counts.length - 1, Math.floor(q * counts.length))] : 0);
+
+    const over = perDay
+      .filter(r => (Number(r.count) || 0) > threshold)
+      .map(r => ({ day: r.day, count: Number(r.count), campaign: r.campaign, locationId: r.location_id }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({
+      window: { start, end },
+      threshold,
+      accountDays: counts.length,
+      distribution: {
+        avg: counts.length ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 0,
+        p50: at(0.5), p90: at(0.9), p99: at(0.99),
+        max: counts.length ? counts[counts.length - 1] : 0,
+      },
+      // How many days each candidate ceiling would have flagged, so the choice
+      // is made against history rather than a guess.
+      wouldFlag: [4000, 6000, 8000, 10000, 15000, 20000]
+        .map(t => ({ threshold: t, accountDays: counts.filter(n => n > t).length })),
+      overThreshold: over.slice(0, 50),
+      overThresholdCount: over.length,
+      top: perDay
+        .map(r => ({ day: r.day, count: Number(r.count), campaign: r.campaign }))
+        .sort((a, b) => b.count - a.count).slice(0, 10),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/admin/sms-location/:locationId', requireSecret, async (req, res) => {
   try {
     if (!db.enabled()) return res.status(400).json({ error: 'No database configured' });

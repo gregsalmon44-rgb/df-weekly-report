@@ -176,6 +176,35 @@ function buildReportHtml(data, logoUri) {
     ${un.unidentified ? `<div class="us" style="margin-top:8px">${un.unidentified.toLocaleString('en-GB')} of these carry no usable location id and no recognised campaign name, so there is nothing to identify them by${un.unidentifiedSample && un.unidentifiedSample.length ? ` (e.g. ${esc(un.unidentifiedSample.slice(0, 3).join(', '))})` : ''}.</div>` : ''}
   </div>` : '';
 
+  // ── SMS spikes ─────────────────────────────────────────────────────────────
+  // One sub-account over the daily ceiling, for the WEEK just reported. Unlike
+  // unassigned leads this is not a figure that is missing — it is a figure that
+  // is too BIG, which is the harder kind to notice: the week's totals still look
+  // plausible while that client's SMS-per-lead is nonsense.
+  const sp = lw.smsSpikes || null;
+  const smsSpikeSection = (sp && sp.rows && sp.rows.length) ? `
+  <div class="unassigned spike">
+    <div class="ut">${sp.rows.length === 1 ? 'One account sent' : sp.rows.length + ' account-days sent'} more than ${Number(sp.threshold).toLocaleString('en-GB')} SMS in a single day</div>
+    <div class="us">No sub-account should exceed that in a day, so this is most likely a workflow re-enrolling an existing list rather than genuine volume.
+    SMS cost and SMS-per-lead for the client(s) below are overstated until it is checked, and the agency totals with them.</div>
+    <table>
+      <tr><th style="width:74px">SMS</th><th style="width:92px">Day</th><th>Campaign</th></tr>
+      ${sp.rows.slice(0, 12).map(r => `<tr>
+        <td class="n">${r.count.toLocaleString('en-GB')}</td>
+        <td>${d(r.day)}</td>
+        <td>${esc(r.campaign || '')}${r.campaign ? '' : `<span class="id">${esc(r.locationId)}</span>`}</td>
+      </tr>`).join('')}
+      ${sp.rows.length > 12 ? `<tr><td class="n">—</td><td colspan="2">and ${sp.rows.length - 12} further account-day(s)</td></tr>` : ''}
+    </table>
+  </div>` :
+    // The check not RUNNING is itself worth saying. Silence would read as "no
+    // spikes", which is the assumption that let OBE's 110,565 sit for five days.
+    (sp && sp.checked === false ? `
+  <div class="unassigned spike">
+    <div class="ut">The daily SMS spike check did not run</div>
+    <div class="us">${esc(sp.reason || 'the counter database was unreachable')} — an over-sending account would not have been flagged this week.</div>
+  </div>` : '');
+
   // ── Unallocated payments ───────────────────────────────────────────────────
   // Money taken that belongs to nobody the report knows about. Known non-revenue
   // (test cards, another agency's payments on this gateway) is filtered out by
@@ -257,6 +286,16 @@ body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:
 .unassigned td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .unassigned td.id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: #7f1d1d; }
 
+/* Amber rather than the unassigned panel's red: nothing is missing here, a
+   number is too big. Shares the layout so the two read as the same kind of
+   notice, in the same place, above the figures they qualify. */
+.unassigned.spike { border-color: #fcd34d; background: #fffbeb; }
+.unassigned.spike .ut { color: #92400e; }
+.unassigned.spike .us { color: #78350f; }
+.unassigned.spike th { color: #78350f; border-bottom-color: #fcd34d; }
+.unassigned.spike td { color: #451a03; border-bottom-color: #fef3c7; }
+.unassigned.spike td .id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; color: #92400e; }
+
 .section-title { font-size: 13px; font-weight: 700; margin: 14px 0 6px; color: #0b1220;
   display: flex; align-items: center; gap: 8px; }
 .section-title::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
@@ -319,6 +358,7 @@ table.wo td.cname { color: #111827; }
   </div>
 
   ${unassignedSection}
+  ${smsSpikeSection}
 
   <div class="cards">
     ${card('All-Time', 'Since ' + dY(at.rangeStart), at.grand, ACCENT_ALL)}

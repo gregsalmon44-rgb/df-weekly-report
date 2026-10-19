@@ -33,6 +33,13 @@ const config = {
     ? process.env.SMS_SOURCE : 'sheet',
   // Shared secret on the GHL webhook URL. No secret = the endpoint is closed.
   smsHookSecret: process.env.SMS_HOOK_SECRET || '',
+  // A sub-account sending more than this in ONE day is a fault, not a busy day:
+  // a workflow re-enrolling an existing list. OBE hit exactly that — 110,565
+  // sends against a normal 4,000, which went unnoticed for five days and threw
+  // out every SMS-per-lead figure it touched. A ceiling rather than a trend
+  // test, so it can be reasoned about without reference to an average that the
+  // spike itself would have moved.
+  smsDailyMax: num(process.env.SMS_DAILY_ALERT_THRESHOLD, 10000),
 
   slackBotToken:  process.env.SLACK_BOT_TOKEN || '',
   slackChannelId: process.env.SLACK_REPORT_CHANNEL_ID || '',

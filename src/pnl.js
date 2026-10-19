@@ -32,7 +32,7 @@ const addStats = (a, b) => ({
 // industryOverride pins a client to the category the ALL-TIME run put them in,
 // so the same client cannot appear under one category all-time and another for
 // last week purely because of what they happened to deliver in those seven days.
-async function getPnl(startDay, endDay, { force = false, industryOverride = null } = {}) {
+async function getPnl(startDay, endDay, { force = false, industryOverride = null, spikes = false } = {}) {
   const override = industryOverride || new Map();
   const { entities, campaigns, warnings } = await fetchEntities({ force });
   const computedRules = computed.loadRules();
@@ -254,6 +254,54 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     : null;
   if (suspect) warnings.unshift('SHEET: ' + suspect);
 
+  // ── SMS spikes ─────────────────────────────────────────────────────────────
+  // A single sub-account over the daily ceiling. Checked on the WEEK only, not
+  // all-time: a spike months ago has already done its damage and would make this
+  // permanent furniture, where the point is a Monday-morning action list.
+  //
+  // Read from the counter table rather than the report's SMS figure, because the
+  // sheet records one hand-typed number per campaign per day and cannot show a
+  // runaway workflow — the counter is what moves when one fires.
+  let smsSpikes = null;
+  if (spikes) {
+    smsSpikes = { threshold: config.smsDailyMax, rows: [], checked: false, reason: null };
+    try {
+      const perDay = await db.getSmsByDay(startDay, endDay);
+      smsSpikes.checked = true;
+      // Roster name first: the counter stores whatever GHL sent, which can be
+      // stale or blank, and the roster is the name everyone else recognises.
+      const campaignForLoc = new Map();
+      for (const c of campaigns) {
+        const loc = (c.locationId || '').trim();
+        if (loc && !campaignForLoc.has(loc)) campaignForLoc.set(loc, c.name);
+      }
+      for (const r of perDay) {
+        const n = Number(r.count) || 0;
+        if (n <= config.smsDailyMax) continue;
+        smsSpikes.rows.push({
+          day: r.day,
+          count: n,
+          locationId: r.location_id,
+          campaign: campaignForLoc.get(r.location_id) || r.campaign || null,
+        });
+      }
+      smsSpikes.rows.sort((a, b) => b.count - a.count || a.day.localeCompare(b.day));
+      if (smsSpikes.rows.length) {
+        warnings.unshift('SMS: ' + smsSpikes.rows.length + ' account-day(s) over ' +
+          config.smsDailyMax.toLocaleString('en-GB') + ' SMS — ' +
+          smsSpikes.rows.map(r => (r.campaign || r.locationId) + ' ' + r.count.toLocaleString('en-GB') + ' on ' + r.day).join('; ') +
+          '. SMS-per-lead for those clients is overstated until this is checked.');
+      }
+    } catch (e) {
+      // No database, or it is unreachable. Say so: "no spikes found" and "never
+      // looked" are the same empty list otherwise, and this check exists
+      // precisely because a silent miss cost five days last time.
+      smsSpikes.reason = e.message;
+      warnings.unshift('SMS: the daily-spike check could not run (' + e.message +
+        '), so an over-sending account would not be flagged this week.');
+    }
+  }
+
   // Leads that were read but landed on nobody. Each one is a lead the business
   // delivered and paid to deliver, missing from a client's row — and for a
   // client whose revenue is DERIVED from their lead count (LeadBreakers), money
@@ -296,6 +344,8 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
   return {
     rangeStart: startDay, rangeEnd: endDay,
     unassigned,
+    // null = not checked for this window (all-time never is); {rows: []} = checked, none found.
+    smsSpikes,
     clientCount: rows.length,
     grand, industries,
     dataSpend: { available: data.available, reason: data.reason, totals: data.totals, keyedBy: data.keyedBy || null },
@@ -319,7 +369,7 @@ async function buildReportData(start, end, opts = {}) {
   const allTime = await getPnl(config.allTimeStart, etDateStr(), opts);
   const industryOverride = new Map();
   for (const ind of allTime.industries) for (const c of ind.clients) industryOverride.set(c.key, c.industry);
-  const lastWeek = await getPnl(week.start, week.end, { ...opts, industryOverride });
+  const lastWeek = await getPnl(week.start, week.end, { ...opts, industryOverride, spikes: true });
   return { generatedFor: etDateStr(), allTime, lastWeek, smsUnitCost: config.smsUnitCost };
 }
 
