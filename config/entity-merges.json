@@ -1,0 +1,10 @@
+{
+  "merges": [
+    {
+      "from": "Stellar-Pro Ohio",
+      "into": "Stellar Pro",
+      "note": "Seven campaigns, one client. 'Stellar Pro - OH - Gutters' and 'Stellar-Pro (Ohio)' already group together because the state sits after a dash or inside brackets, but 'Stellar-Pro Ohio (Larry/Travis)' carries the state in the name itself, so 'Ohio' survived into the key and split the client in two — the Ohio pair held leads and data cost while the other five held all the revenue. Confirmed by the user 2026-10-19.",
+      "added": "2026-10-19"
+    }
+  ]
+}

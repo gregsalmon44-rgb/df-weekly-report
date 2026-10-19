@@ -4,6 +4,8 @@
 // "Dakota Andekin 2"), and Demand Flow bills them as one, so the report groups
 // campaigns into a BILLING ENTITY and reports per entity. Without that grouping,
 // one campaign shows as pure revenue and its sibling as pure cost.
+const fs = require('fs');
+const path = require('path');
 const { fetchTab, columnIndex } = require('./sheets');
 const { config } = require('./config');
 
@@ -27,6 +29,40 @@ function entityKeyFor(name) {
     .replace(/[^a-z0-9 ]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Clients the naming convention cannot group on its own, listed by hand in
+// config/entity-merges.json. The convention strips a trade or state that sits
+// after a dash or inside brackets, but not one written straight into the name:
+// "Stellar-Pro Ohio (Larry)" keeps its "Ohio" and so split away from
+// "Stellar Pro", taking the leads and data cost with it while the other
+// campaigns kept all of the revenue.
+//
+// Stripping trailing state names generally was the alternative and was
+// rejected: it would quietly mangle a client whose name ENDS in one, and this
+// module's rule is that a name which does not fit the convention is left alone
+// rather than guessed at. So merges are data, reviewed by a person, and a rule
+// that stops matching anything says so in the report instead of going quiet.
+const MERGE_FILE = path.join(__dirname, '..', 'config', 'entity-merges.json');
+
+function loadMerges() {
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(MERGE_FILE, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error('[Roster] could not read config/entity-merges.json:', e.message);
+    return [];
+  }
+  return (Array.isArray(raw.merges) ? raw.merges : [])
+    .map(m => ({
+      fromKey: entityKeyFor(m.from),
+      intoKey: entityKeyFor(m.into),
+      from: m.from,
+      into: m.into,
+    }))
+    // A rule pointing at itself would merge a client into nothing and hide the
+    // mistake, so drop it rather than apply it.
+    .filter(m => m.fromKey && m.intoKey && m.fromKey !== m.intoKey);
 }
 
 function entityKeyOf(campaignName) {
@@ -101,14 +137,23 @@ async function fetchCampaigns({ force = false } = {}) {
 async function fetchEntities(opts) {
   const { campaigns, warnings } = await fetchCampaigns(opts);
   const byKey = new Map();
+  const merges = loadMerges();
+  const mergesUsed = new Set();
 
   for (const c of campaigns) {
-    const key = entityKeyFor(entityKeyOf(c.name)) || entityKeyFor(c.name);
+    const ownKey = entityKeyFor(entityKeyOf(c.name)) || entityKeyFor(c.name);
+    const merge = merges.find(m => m.fromKey === ownKey);
+    if (merge) mergesUsed.add(merge.fromKey);
+    const key = merge ? merge.intoKey : ownKey;
     let e = byKey.get(key);
     if (!e) {
       e = { key, name: entityKeyOf(c.name) || c.name, campaigns: [], locationIds: [], industry: '', off: true };
       byKey.set(key, e);
     }
+    // The display name otherwise comes from whichever campaign the sheet listed
+    // first, so a merged client would be titled "Stellar-Pro Ohio" or
+    // "Stellar Pro" depending on row order. The rule decides it.
+    if (merge) e.name = merge.into;
     e.campaigns.push(c);
     if (c.locationId && !e.locationIds.includes(c.locationId)) e.locationIds.push(c.locationId);
     // First non-empty industry wins — siblings occasionally differ ("New Fence"
@@ -116,6 +161,16 @@ async function fetchEntities(opts) {
     if (!e.industry && c.industry) e.industry = c.industry;
     // OFF only when EVERY campaign is off.
     if (c.status !== OFF_STATUS) e.off = false;
+  }
+
+  // A merge whose "from" no longer appears has either been fixed in the sheet or
+  // been renamed again. Either way the rule is now doing nothing, and a silent
+  // no-op is how a client splits back in two without anyone noticing.
+  for (const m of merges) {
+    if (!mergesUsed.has(m.fromKey)) {
+      warnings.push(`Merge rule "${m.from}" → "${m.into}" matched no campaign, so it did nothing — ` +
+        `check config/entity-merges.json against the sheet.`);
+    }
   }
 
   const entities = [...byKey.values()];
