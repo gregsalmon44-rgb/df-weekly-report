@@ -47,6 +47,11 @@ const config = {
   // Monday run fails. It cannot carry the PDF — that needs the bot token above.
   slackAlertWebhook: process.env.SLACK_ALERT_WEBHOOK || '',
 
+  // London dates (YYYY-MM-DD, comma-separated) on which the Monday cron must
+  // not post — the week was already posted by hand, and a second copy leaves
+  // the channel guessing which one counts.
+  cronSkipDates: (process.env.CRON_SKIP_DATES || '').split(',').map(s => s.trim()).filter(Boolean),
+
   adminSecret: process.env.ADMIN_SECRET || '',
   port: num(process.env.PORT, 4100),
 };

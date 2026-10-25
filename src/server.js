@@ -376,6 +376,12 @@ async function cronTick() {
   if (lastPostedOn === stamp) return;
   lastPostedOn = stamp;
 
+  const londonDay = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  if (config.cronSkipDates.includes(londonDay)) {
+    console.log(`[Cron] Monday report skipped for ${londonDay} — listed in CRON_SKIP_DATES`);
+    return;
+  }
+
   if (!slack.configured()) {
     console.warn('[Cron] Monday report skipped — Slack is not configured (needs SLACK_BOT_TOKEN and SLACK_REPORT_CHANNEL_ID)');
     await slack.postAlert(':warning: The Demand Flow weekly report could not be posted: no Slack bot token is configured, ' +
@@ -413,6 +419,7 @@ app.listen(config.port, async () => {
   console.log(`[DF Report] listening on ${config.port} (today is ${etDateStr()} ET)`);
   console.log(`[DF Report] slack: ${slack.configured() ? 'configured → ' + config.slackChannelId : 'NOT configured'}`);
   console.log(`[DF Report] data cost keyed by: ${config.dataCostKey}`);
+  if (config.cronSkipDates.length) console.log(`[DF Report] Monday post skipped on: ${config.cronSkipDates.join(', ')}`);
   if (db.enabled()) {
     try { await db.init(); smsCounter.start(); }
     catch (e) { console.error('[DB] init failed:', e.message); }
