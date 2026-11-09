@@ -127,6 +127,18 @@
       "client": "Stellar Pro",
       "note": "One-off reattempt with no vault id; matched on the email domain. Confirmed by the user 2026-09-28.",
       "learned": "2026-09-28"
+    },
+    {
+      "email": "saraleemclaughlin@gmail.com",
+      "client": "Dean Dennis",
+      "note": "Sara-Lee McLaughlin pays for Dean Dennis (user, 9 Nov 2026)",
+      "learned": "2026-11-09"
+    },
+    {
+      "email": "mrmiles05@gmail.com",
+      "client": "Miles Pierre",
+      "note": "Cardholder name entered as Pierre Miles (user, 9 Nov 2026)",
+      "learned": "2026-11-09"
     }
   ],
   "pending": []
