@@ -226,7 +226,7 @@ async function getPnl(startDay, endDay, { force = false, industryOverride = null
     const dep = round2(revenue.byEntity.get(key) || 0);
     if (!dep) continue;
     rows.push({
-      name: `${p.name} (not in the sheet yet)`, key, off: false, industry: p.industry || 'Other',
+      name: p.off ? p.name : `${p.name} (not in the sheet yet)`, key, off: !!p.off, industry: p.industry || 'Other',
       leads: 0, sms: 0, deposits: dep, cost: 0, dataCost: 0, netProfit: dep,
       locationIds: [], campaigns: [], pending: true,
     });

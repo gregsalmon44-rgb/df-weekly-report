@@ -95,6 +95,9 @@ function pendingClients(rules) {
     name: p.name,
     industry: p.industry || 'Other',
     note: p.note || '',
+    // off:true = paid but never became a client (never in the sheet). Their money
+    // is real revenue, so it is counted, but under OFF rather than as a live client.
+    off: p.off === true,
   }));
 }
 

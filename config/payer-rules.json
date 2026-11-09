@@ -141,5 +141,13 @@
       "learned": "2026-11-09"
     }
   ],
-  "pending": []
+  "pending": [
+    {
+      "name": "Omar Ramirez",
+      "off": true,
+      "industry": "Solar",
+      "note": "Paid 2 x $100 (18 Sep, 18 Oct) but never started; not in the sheet. Counted under OFF (user, 9 Nov 2026).",
+      "added": "2026-11-09"
+    }
+  ]
 }
